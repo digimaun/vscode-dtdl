@@ -2,7 +2,7 @@
   "name": "vscode-dtdl",
   "displayName": "DTDL",
   "description": "This extension provides syntax highlighting to read and edit JSON documents using the Digital Twins Definition Language",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "vsciot-vscode",
   "aiKey": "[AIKEY PLACEHOLDER]",
   "icon": "logo.png",
@@ -24,6 +24,7 @@
   ],
   "activationEvents": [
     "onCommand:vscode-dtdl.createInterface",
+    "onCommand:vscode-dtdl.importModel",
     "onLanguage:json",
     "workspaceContains:**/*.json"
   ],
@@ -33,6 +34,11 @@
       {
         "command": "vscode-dtdl.createInterface",
         "title": "Create Interface",
+        "category": "DTDL"
+      },
+      {
+        "command": "vscode-dtdl.importModel",
+        "title": "Import DTDL model",
         "category": "DTDL"
       }
     ],

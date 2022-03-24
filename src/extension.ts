@@ -5,7 +5,6 @@ import * as vscode from "vscode";
 import { ColorizedChannel } from "./common/colorizedChannel";
 import { Constants } from "./common/constants";
 import { EventType } from "./common/eventType";
-import { NSAT } from "./common/nsat";
 import { ProcessError } from "./common/processError";
 import { TelemetryClient } from "./common/telemetryClient";
 import { TelemetryContext } from "./common/telemetryContext";
@@ -20,8 +19,6 @@ function initCommand(
   context: vscode.ExtensionContext,
   telemetryClient: TelemetryClient,
   outputChannel: ColorizedChannel,
-  nsat: NSAT,
-  enableSurvey: boolean,
   event: EventType,
   // eslint-disable-next-line  @typescript-eslint/no-explicit-any
   callback: (...args: any[]) => Promise<any>
@@ -50,9 +47,6 @@ function initCommand(
         telemetryContext.end();
         telemetryClient.sendEvent(event, telemetryContext);
         outputChannel.show();
-        if (enableSurvey) {
-          nsat.takeSurvey(context);
-        }
       }
     })
   );
@@ -61,7 +55,6 @@ function initCommand(
 export function activate(context: vscode.ExtensionContext): void {
   const outputChannel = new ColorizedChannel(Constants.CHANNEL_NAME);
   const telemetryClient = new TelemetryClient(context);
-  const nsat = new NSAT(Constants.NSAT_SURVEY_URL, telemetryClient);
   const deviceModelManager = new DeviceModelManager(context, outputChannel);
 
   telemetryClient.sendEvent(Constants.EXTENSION_ACTIVATED_MSG);
@@ -82,7 +75,59 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ scheme: "file", language: "json" }]
+    documentSelector: [{ scheme: "file", language: "json" }],
+    middleware: {
+      executeCommand: async (command, args, next) => {
+        if (command === "vscode-dtdl.importModel") {
+          const workspaceFolders = vscode.workspace.workspaceFolders;
+          if (workspaceFolders === undefined) {
+            return;
+          }
+          const workspaceTable: { [name: string]: vscode.Uri } = {};
+          workspaceFolders.forEach(workspace => {
+            workspaceTable[workspace.name] = workspace.uri;
+          });
+          const targetWorkspace = await vscode.window.showQuickPick(Object.keys(workspaceTable), {
+            placeHolder: "Target workspace for import"
+          });
+
+          if (targetWorkspace === undefined) {
+            return;
+          }
+
+          const selected = await vscode.window.showQuickPick(["From IoT Models Repository", "From File"]);
+          if (selected === "From IoT Models Repository") {
+            const targetType = "dmr";
+            const dtmiInput = await vscode.window.showInputBox({
+              prompt: "Input dtmi",
+              placeHolder: "dtmi:com:example:TemperatureController;1"
+            });
+            if (!dtmiInput) {
+              return;
+            }
+            args.push(workspaceTable[targetWorkspace].toString());
+            args.push(targetType);
+            args.push(dtmiInput);
+            return next(command, args);
+          } else if (selected === "From File") {
+            const targetType = "file";
+            const pathInput = await vscode.window.showInputBox({
+              prompt: "Path to expanded model file",
+              placeHolder: "/path/to/expanded/model.json"
+            });
+            if (!pathInput) {
+              return;
+            }
+            args.push(workspaceTable[targetWorkspace].toString());
+            args.push(targetType);
+            args.push(pathInput);
+            return next(command, args);
+          }
+        }
+
+        return;
+      }
+    }
   };
 
   client = new LanguageClient(
@@ -107,8 +152,6 @@ export function activate(context: vscode.ExtensionContext): void {
     context,
     telemetryClient,
     outputChannel,
-    nsat,
-    true,
     EventType.CreateInterface,
     async (): Promise<void> => {
       return deviceModelManager.createModel(ModelType.Interface);
